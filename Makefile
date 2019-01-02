@@ -2,5 +2,5 @@
 
 
 all:
-	g++ -c Tree.cpp
+	g++ -c Trie.cpp
 	g++ -O3 -o gRNA find-gRNAs.cpp

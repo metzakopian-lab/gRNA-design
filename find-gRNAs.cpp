@@ -4,7 +4,7 @@
 #include <cstring>
 #include <vector>
 #include <map>
-#include "Tree.h"
+#include "Trie.h"
 
 #define BUFFER_SIZE 120000
 #define CHROMOSOME_STATE 2
@@ -56,7 +56,7 @@ typedef struct{
 
 }gRNAmeta;
 
-std::map<std::string, gRNAmeta> gRNAs;
+std::map<std::string, std::vector<gRNAmeta>> gRNAs;
 
 void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& pam, const std::string& chr_name, size_t& genome_offset_counter)
 {
@@ -84,16 +84,13 @@ void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& p
     }
     if(pam_state == pam.size())
     {
-      memcpy(gRNA, b - offset, nt);
+      memcpy(gRNA,b - offset, nt);
       gRNAmeta g;
       g.start_pos = genome_offset_counter - pam.size() - nt;
       g.end_pos = g.start_pos + nt;
       
-      auto it = gRNAs.insert(std::make_pair(gRNA, 1));
-      if (it.second)
-      {
-              it.first->second++;
-      }
+      auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<gRNAmeta>()));
+      it.first->second.push_back(g);
       // std::cout << "Found guide" << std::endl;
       // store metadata
     }
@@ -126,7 +123,7 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
       char chromname[1024];
       fgets(chromname, 1024, fp);
 
-      std::size_t pos = chromname.find_first_of(" ");
+      std::size_t pos = chr.find_first_of(" ");
       chr = chromname;
       if(pos != std::string::npos)
       {
@@ -141,7 +138,7 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
       continue;
 
     }
-    extractgRNA(buffer, buf_read, nt, pam, pos_counter, chr, pos_counter);
+    extractgRNA(buffer, buf_read, nt, pam, chr, pos_counter);
     
 
     // Finally:
@@ -171,7 +168,7 @@ int main(int argc, char* argv[])
   std::cout << gRNAs.size() << "found" << std::endl;
   for ( auto& gRNA : gRNAs)
   {
-    t += gRNA.second;
+    t += gRNA.second.size();
   }
   std::cout << t << " hits " << std::endl;
   return 0;

@@ -3,32 +3,22 @@
 #include <fstream>
 #include <cstdio>
 #include <cstring>
-#include <vector>
-#include <map>
 
-#include <boost/serialization/map.hpp>
-#include <boost/serialization/vector.hpp>
-
-#include <boost/archive/binary_oarchive.hpp>
-
-
-
+#include "Model.h"
+#include "Serialization.h"
 
 #define BUFFER_SIZE 120000
 #define CHROMOSOME_STATE 2
 #define N_STATE 1
 
-std::string current_chromosome;
-int read_pos = 0;
-int write_pos = 0;
-int readFastaLine(FILE *fp, char* buffer, size_t buf_size, size_t* length)
+GuideModel gRNAs;
+
+int readFastaLine(FILE *fp, char* buffer, const size_t buf_size, size_t* length)
 {
   char c;
   size_t i;
   for ( i = 0; i < buf_size && (c = fgetc(fp)) != '>' && c != EOF; ++i)
-  
   {
-    
     if(c == '\n')
     {
       continue;
@@ -52,38 +42,12 @@ int readFastaLine(FILE *fp, char* buffer, size_t buf_size, size_t* length)
   {
     return 1;
   }
-
 }
-
-class gRNAmeta
-{
-  
-  friend class boost::serialization::access;
- public:
-  size_t start_pos;
-  size_t end_pos;
-  size_t id;
-  std::string chromosome;
-
-  template <class Archive>
-  void serialize(Archive& ar, unsigned int version)
-  {
-    ar& start_pos;
-    ar& end_pos;
-    ar& id;
-    ar& chromosome;
-    
-  }
-};
-
-std::map<std::string, std::vector<gRNAmeta>> gRNAs;
 
 void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& pam, const std::string& chr_name, size_t& genome_offset_counter)
 {
   
   char gRNA[256];
-  
-  
   unsigned offset = nt + pam.size();
   const char* end = buf + new_bytes + offset;
   unsigned char pam_state = 0;
@@ -105,18 +69,15 @@ void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& p
     if(pam_state == pam.size())
     {
       memcpy(gRNA,b - offset, nt);
-      gRNAmeta g;
+
+      GuideMeta g;
       g.start_pos = genome_offset_counter - pam.size() - nt;
       g.end_pos = g.start_pos + nt;
       
-      auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<gRNAmeta>()));
+      auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<GuideMeta>()));
       it.first->second.push_back(g);
-      // std::cout << "Found guide" << std::endl;
-      // store metadata
     }
-    
   }
-  
 }
 
 int worker(FILE* fp, unsigned char nt, const std::string pam)
@@ -153,8 +114,6 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
       }
       
       std::cout << " Processing chromosome: " << chromname << " as " << chr_name << std::endl;
-      
-      current_chromosome = buffer;
       buf = buffer;
       pos_counter = 0;
       continue;
@@ -182,9 +141,8 @@ int main(int argc, char* argv[])
   
   if(argc != 3)
   {
-      
     std::cerr << "Invalid number of arguments" << std::endl;
-    std::cout << "Usage:" << std::endl;
+    std::cout << "Usage: " << argv[0] << "<fasta file> <binary-archive>" << std::endl;
     return 1;
   }
 
@@ -192,7 +150,6 @@ int main(int argc, char* argv[])
   std::string gRNA_file = argv[2];
   
   std::cout << "Input file " << file << std::endl;
-  
   FILE *fp = fopen(file.c_str(), "r");
   
   if (fp)
@@ -204,23 +161,15 @@ int main(int argc, char* argv[])
     std::cerr << file << " not found" << std::endl;
     return 1;
   }
-  size_t t = 0;
-  std::cout << gRNAs.size() << "found" << std::endl;
+  size_t t = 0, max = 0;
+  
+  modelSerialize(gRNAs,gRNA_file);
   
 
-  std::cerr << "Dumping results to " << gRNA_file << std::endl;
-
-  std::ofstream out(gRNA_file.c_str());
-  
+  std::cout << "Found " << gRNAs.size() << " gRNAs" << std::endl;
+  for (auto const& g : gRNAs)
   {
-    boost::archive::binary_oarchive oa(out);
-    oa << gRNAs;
-  }
-
-  for ( auto& gRNA : gRNAs)
-  {
-    t += gRNA.second.size();
-    
+    // max  =
   }
   std::cout << t << " hits " << std::endl;
   return 0;

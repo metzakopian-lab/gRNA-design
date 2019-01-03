@@ -8,8 +8,11 @@
 #include "Serialization.h"
 
 #define BUFFER_SIZE 120000
-#define CHROMOSOME_STATE 2
+
 #define N_STATE 1
+#define EOF_STATE 0
+#define SEQ_STATE 1 
+#define CHROMOSOME_STATE 2
 
 GuideModel gRNAs;
 
@@ -32,19 +35,19 @@ int readFastaLine(FILE *fp, char* buffer, const size_t buf_size, size_t* length)
 
   if (c == EOF)
   {
-    return 0;
+    return EOF_STATE;
   }
   else if (c == '>')
   {
-    return 2;
+    return CHROMOSOME_STATE;
   }
   else
   {
-    return 1;
+    return SEQ_STATE;
   }
 }
 
-void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& pam, const std::string& chr_name, size_t& genome_offset_counter)
+void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& pam, const std::string& chr_name, size_t& genome_offset_counter, size_t& guide_uid)
 {
   
   char gRNA[256];
@@ -69,13 +72,27 @@ void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& p
     if(pam_state == pam.size())
     {
       memcpy(gRNA,b - offset, nt);
-
-      GuideMeta g;
-      g.start_pos = genome_offset_counter - pam.size() - nt;
-      g.end_pos = g.start_pos + nt;
-      
-      auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<GuideMeta>()));
-      it.first->second.push_back(g);
+      gRNA[nt] = '\0';
+      bool all_nts = true;
+      for(int i = 0; i < nt; i++)
+      {
+        const char& c = gRNA[i];
+        if( not ((c == 'A') || (c == 'T') || (c == 'G') || (c == 'G')))
+        {
+          all_nts = false;
+          break;
+        }
+      }
+      if (all_nts)
+      {
+        GuideMeta g;
+        g.start_pos = genome_offset_counter - pam.size() - nt;
+        g.end_pos = g.start_pos + nt;
+        g.chromosome = chr_name;
+        g.id = guide_uid++;
+        auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<GuideMeta>()));
+        it.first->second.push_back(g);
+      }
     }
   }
 }
@@ -89,18 +106,19 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
   size_t buf_read = 0;
   char* buf = buffer;
 
+
   size_t offset = nt + pam.size();
   size_t pos_counter = 0;
-  // return 0;
+  size_t guide_id = 0;
   std::string chr;
+
   while (1)
   {
     int state = readFastaLine(fp, buf, buf_size - offset, &buf_read);
-    // std::cout << "State " << state << std::endl;
     std::string chr_name;
     if (state == CHROMOSOME_STATE)
     {
-      // read the fasta
+      // read the new chromosome
       char chromname[1024];
       fgets(chromname, 1024, fp);
 
@@ -119,14 +137,13 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
       continue;
 
     }
-    extractgRNA(buffer, buf_read, nt, pam, chr_name, pos_counter);
-    
-
-    // Finally:
+    extractgRNA(buffer, buf_read, nt, pam, chr_name, pos_counter, guide_id);
     memcpy(buffer, buf + buf_read - offset, offset);
     buf = buffer + offset;
-    if (state == 0)
+    
+    if (state == EOF_STATE)
     {
+      // Let's get the fuck out of here
       break;
     }
   }
@@ -164,14 +181,7 @@ int main(int argc, char* argv[])
   size_t t = 0, max = 0;
   
   modelSerialize(gRNAs,gRNA_file);
-  
-
-  std::cout << "Found " << gRNAs.size() << " gRNAs" << std::endl;
-  for (auto const& g : gRNAs)
-  {
-    // max  =
-  }
-  std::cout << t << " hits " << std::endl;
+ 
   return 0;
 }
 

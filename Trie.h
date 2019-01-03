@@ -44,7 +44,7 @@ public:
   std::vector<int> gRNA_ids;
   
   Node();
-  Node& expandChildren(const Base& nucl, int id, bool isLast = false);
+  Node* expandChildren(const Base& nucl);
   
   
 };

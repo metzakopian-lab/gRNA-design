@@ -1,10 +1,12 @@
-#include "Trie.h"
-
 #include <cstring>
 
+#include "Trie.h"
 
 
-Node& Node::expandChildren(const Base& nucl, int id, bool isLast)
+
+
+
+Node* Node::expandChildren(const Base& nucl)
 {
   // initialize the node
   if(children[nucl] == NULL)
@@ -12,18 +14,10 @@ Node& Node::expandChildren(const Base& nucl, int id, bool isLast)
     this->children[nucl] = new Node();
 
   }
-  
-  if(isLast)
-  {
-    this->children[nucl]->incr_node(id);
-    this->children[nucl]->isLeaf = true;
-  }
-  else
-  {
-    this->children[nucl]->incr_node();
-  }
 
-  return *(this->children[nucl]);
+  this->children[nucl]->incr_node();
+  
+  return this->children[nucl];
 }
 
 void Node::incr_node()
@@ -39,6 +33,9 @@ void Node::incr_node(int id)
 
 Node::Node() : isLeaf(false)
 {
-  memset(children, 0, sizeof(children));
+ 
+  for (auto i = 0; i < 4; i++){
+    children[i] = NULL;
+  }
 }
 

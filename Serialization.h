@@ -2,6 +2,7 @@
 
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/string.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <fstream>
@@ -13,10 +14,10 @@
 template <class Archive>
 void serialize(Archive& ar, GuideMeta& obj, unsigned int version)
 {
-        ar& obj.start_pos;
-        ar& obj.end_pos;
-        ar& obj.id;
-        ar& obj.chromosome;
+        ar & obj.start_pos;
+        ar & obj.end_pos;
+        ar & obj.id;
+        ar & obj.chromosome;
     
 }
 
@@ -24,5 +25,5 @@ void serialize(Archive& ar, GuideMeta& obj, unsigned int version)
 void modelSerialize(const GuideModel& gRNAs , const std::string& filename);
 
 
-GuideModel modelDeserialize(const std::string& filename);
+void modelDeserialize(GuideModel& obj, const std::string& filename);
 

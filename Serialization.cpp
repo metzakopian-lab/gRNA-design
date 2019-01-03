@@ -2,28 +2,48 @@
 #include <iostream>
 
 
-void modelSerialize(const GuideModel& gRNAs , const std::string& filename)
+void stats(const GuideModel& gRNAs)
 {
-        std::cerr << "Dumping results to " << filename.c_str() << std::endl;
-        std::ofstream out(filename.c_str());
-  
-        {
-                boost::archive::binary_oarchive oa(out);
-                oa << gRNAs;
-        }
+  std::cout << "Found " << gRNAs.size() << " unique gRNAs" << std::endl;
+  size_t max = 0, sum = 0;
+  for (auto const& g : gRNAs)
+  {
+    
+    max  = max > g.second.size() ? max : g.second.size();
+    sum += g.second.size();
+  }
+
+  std::cout << "Max duplicates: " << max << ", Total unique loci: " << sum <<std::endl;
 }
 
 
 
-GuideModel modelDeserialize(const std::string& filename)
+void modelSerialize(const GuideModel& gRNAs , const std::string& filename)
 {
-        GuideModel gRNAs;
-        std::cerr << "Reading Model from " << filename << std::endl;
-        
-        std::ifstream in(filename.c_str());
-        {
-                boost::archive::binary_iarchive ia(in);
-                ia >> gRNAs;
-        }
-        return gRNAs;
+  std::cerr << "Dumping results to " << filename.c_str() << std::endl;
+  stats(gRNAs);
+  std::ofstream out(filename.c_str());
+  
+  {
+    boost::archive::binary_oarchive oa(out);
+    oa << gRNAs;
+  }
+}
+
+
+
+
+void modelDeserialize(GuideModel& gRNAs, const std::string& filename)
+{
+
+  std::cerr << "Reading Model from " << filename << std::endl;
+  
+  
+  std::ifstream in(filename.c_str());
+  {
+    boost::archive::binary_iarchive ia(in);
+    ia >> gRNAs;
+  }
+  stats(gRNAs);
+
 }

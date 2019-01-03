@@ -1,10 +1,18 @@
 #include <iostream>
 #include <unistd.h>
+#include <fstream>
 #include <cstdio>
 #include <cstring>
 #include <vector>
 #include <map>
-#include "Trie.h"
+
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/vector.hpp>
+
+#include <boost/archive/binary_oarchive.hpp>
+
+
+
 
 #define BUFFER_SIZE 120000
 #define CHROMOSOME_STATE 2
@@ -47,14 +55,26 @@ int readFastaLine(FILE *fp, char* buffer, size_t buf_size, size_t* length)
 
 }
 
-typedef struct{
+class gRNAmeta
+{
+  
+  friend class boost::serialization::access;
+ public:
   size_t start_pos;
   size_t end_pos;
   size_t id;
   std::string chromosome;
 
-
-}gRNAmeta;
+  template <class Archive>
+  void serialize(Archive& ar, unsigned int version)
+  {
+    ar& start_pos;
+    ar& end_pos;
+    ar& id;
+    ar& chromosome;
+    
+  }
+};
 
 std::map<std::string, std::vector<gRNAmeta>> gRNAs;
 
@@ -116,21 +136,23 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
   {
     int state = readFastaLine(fp, buf, buf_size - offset, &buf_read);
     // std::cout << "State " << state << std::endl;
-
+    std::string chr_name;
     if (state == CHROMOSOME_STATE)
     {
       // read the fasta
       char chromname[1024];
       fgets(chromname, 1024, fp);
 
-      std::size_t pos = chr.find_first_of(" ");
+
       chr = chromname;
+      
+      std::size_t pos = chr.find_first_of(" \t");
       if(pos != std::string::npos)
       {
-        chr.substr(0,pos);
+        chr_name = chr.substr(0,pos);
       }
       
-      std::cout << " Processing chromosome: " << chromname << " as " << chr << std::endl;
+      std::cout << " Processing chromosome: " << chromname << " as " << chr_name << std::endl;
       
       current_chromosome = buffer;
       buf = buffer;
@@ -138,7 +160,7 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
       continue;
 
     }
-    extractgRNA(buffer, buf_read, nt, pam, chr, pos_counter);
+    extractgRNA(buffer, buf_read, nt, pam, chr_name, pos_counter);
     
 
     // Finally:
@@ -157,18 +179,48 @@ int worker(FILE* fp, unsigned char nt, const std::string pam)
 
 int main(int argc, char* argv[])
 {
+  
+  if(argc != 3)
+  {
+      
+    std::cerr << "Invalid number of arguments" << std::endl;
+    std::cout << "Usage:" << std::endl;
+    return 1;
+  }
+
   std::string file = argv[1];
-  std::cout << "Reading " << file << std::endl;
+  std::string gRNA_file = argv[2];
+  
+  std::cout << "Input file " << file << std::endl;
+  
   FILE *fp = fopen(file.c_str(), "r");
+  
   if (fp)
   {
     worker(fp,19,"NGG");
   }
+  else
+  {
+    std::cerr << file << " not found" << std::endl;
+    return 1;
+  }
   size_t t = 0;
   std::cout << gRNAs.size() << "found" << std::endl;
+  
+
+  std::cerr << "Dumping results to " << gRNA_file << std::endl;
+
+  std::ofstream out(gRNA_file.c_str());
+  
+  {
+    boost::archive::binary_oarchive oa(out);
+    oa << gRNAs;
+  }
+
   for ( auto& gRNA : gRNAs)
   {
     t += gRNA.second.size();
+    
   }
   std::cout << t << " hits " << std::endl;
   return 0;

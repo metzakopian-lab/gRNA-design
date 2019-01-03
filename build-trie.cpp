@@ -2,6 +2,7 @@
 #include <map>
 #include <vector>
 #include <deque>
+#include <fstream>
 
 #include "Trie.h"
 #include "Serialization.h"
@@ -12,9 +13,11 @@ Node root;
 GuideModel gRNAs;
 
 typedef std::map<std::string, int> GuideID;
+typedef std::map<int,std::string> InvGuideID;
 
-std::map<std::string, std::vector< std::pair<int,short> > > mismatches;
+std::map<int, std::vector< std::pair<int, int> > > mismatches;
 GuideID guide_uid;
+InvGuideID inv_guide_uid;
 
 
 void build_trie(const GuideModel& m, Node& trie_root)
@@ -26,16 +29,16 @@ void build_trie(const GuideModel& m, Node& trie_root)
   for (auto const& g : m)
   {
     const auto& seq = g.first;
-    const auto& meta_vector = g.second;
-    guide_uid[g.first] = gid++;
+    int guide_id = gid++;
+    guide_uid[g.first] = guide_id;
+    inv_guide_uid[guide_id] = g.first;
     
     Node* current = &trie_root;
     for(auto const& c : seq)
     {
-      // std::cout << (current == &trie_root) << std::endl;
-      current = current->expandChildren(map_base(c));
+      current = current->expandChildren(map_base(c)); 
     }
-    current->incr_node(guide_uid[g.first]);
+    current->incr_node(guide_id);
 
     current->isLeaf = true;
     
@@ -43,10 +46,10 @@ void build_trie(const GuideModel& m, Node& trie_root)
 }
 
 
-void mismatch_rec(std::deque<const Node*>& queue, 
-                                     const Node& trie_root, 
-                                     const Base* gRNA, 
-                                     const short mismatches_left, 
+void mismatch_rec(std::deque<const Node*>& queue,
+                                     const Node& trie_root,
+                                     const Base* gRNA,
+                                     const short mismatches_left,
                                      unsigned short nt_left)
 {
   
@@ -81,16 +84,13 @@ void mismatch_rec(std::deque<const Node*>& queue,
       else
       {
         mismatch_rec(queue, v, gRNA + 1, mismatches_left - 1, nt_left - 1);
-      }
-      
+      } 
     }
-
   }
-
 }
 
 
-void mismatch_model(const Node& trie_root, const GuideID& gRNAs, const std::string& guide_str, unsigned short max_mismatches)
+void mismatch_model(const Node& trie_root, int gRNAid, const std::string& guide_str, unsigned short max_mismatches)
 {
   std::deque<const Node*> queue;
   Base* enum_base = new Base[guide_str.size()];
@@ -101,16 +101,48 @@ void mismatch_model(const Node& trie_root, const GuideID& gRNAs, const std::stri
   
   mismatch_rec(queue, trie_root, enum_base, max_mismatches, guide_str.size());
   delete enum_base;
-  if(not queue.empty())
-  {
-    // std::cerr << "Found " << queue.size() << " gRNAs with at least " << max_mismatches << std::endl;
-  }
   
+  mismatches[gRNAid] = std::vector<std::pair<int,int>>();
+  auto& g_mis = mismatches[gRNAid];
+  for(auto const& g : queue)
+  {
+    int score = 0;
+    const std::string& mismatch = inv_guide_uid[g->gRNA_ids[0]];
+    for (auto i = 0; i < guide_str.size(); i++)
+    {
+      score |= ((guide_str[i] == mismatch[i]) << i);
+    }
+    g_mis.push_back(std::make_pair(g->gRNA_ids[0], score));
+  } 
 }
 
 
 
 
+void export_gIDs(const std::string filename)
+{
+  std::fstream out(filename.c_str());
+  out << "gRNAid,sequence"<< std::endl;
+  for (auto const& g : guide_uid)
+  {
+    out << g.first << "," << g.second << std::endl;
+  }
+  out.close();
+}
+
+void export_mismatches(const std::string filename)
+{
+  std::fstream out(filename.c_str());
+  out << "gID1,gID2,score" << std::endl;
+  for (auto const& g : mismatches)
+  {
+    for( auto const& m : g.second)
+    {
+      out << g.first << "," << m.first << m.second << std::endl;
+    }
+  }
+  out.close();
+}
 
 
 
@@ -118,31 +150,29 @@ void mismatch_model(const Node& trie_root, const GuideID& gRNAs, const std::stri
 
 int main(int argc, char* argv[])
 {
-  if (argc != 2)
+  if (argc != 4)
   {
-    std::cerr << "Invalid number of arguments" << std::endl;
-    std::cout << "Usage:" << std::endl;
+    std::cerr << "Invalid number of arguments"<< std::endl;
+    std::cout << "Usage: " <<argv[0] <<" <model-file> <gRNA-ids-csv> <mismatches-csv> " << std::endl;
     return 1;
   }
 
   std::string binary_object_filename = argv[1];
   
-
   modelDeserialize(gRNAs, binary_object_filename);
   build_trie(gRNAs, root);
-
-  // for ( int i = 0 ; i < 4; i++)
-  // {
-  //   std::cout << root.children[i] << std::endl;
-  // }
   int done = 0;
   for(auto const& g : gRNAs)
   {
-    mismatch_model(root, guide_uid, g.first, 3);
-    
-    // std::cout << "." << std::endl;
+    mismatch_model(root, guide_uid[g.first], g.first, 3);
     if ((++done % 10000) == 0)
       std::cerr << "Processing "<< done << "\r";
   }
+  std::cerr << "Exporting data" << std::endl;
+  
+  export_gIDs(argv[2]);
+  export_mismatches(argv[3]);
+  
+  
   return 0;
 }

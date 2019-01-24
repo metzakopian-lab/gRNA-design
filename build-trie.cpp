@@ -121,7 +121,7 @@ void mismatch_model(const Node& trie_root, int gRNAid, const std::string& guide_
 
 void export_gIDs(const std::string filename)
 {
-  std::fstream out(filename.c_str());
+  std::ofstream out(filename.c_str());
   out << "gRNAid,sequence"<< std::endl;
   for (auto const& g : guide_uid)
   {
@@ -132,13 +132,13 @@ void export_gIDs(const std::string filename)
 
 void export_mismatches(const std::string filename)
 {
-  std::fstream out(filename.c_str());
+  std::ofstream out(filename.c_str());
   out << "gID1,gID2,score" << std::endl;
   for (auto const& g : mismatches)
   {
     for( auto const& m : g.second)
     {
-      out << g.first << "," << m.first << m.second << std::endl;
+      out << g.first << "," << m.first << "," << m.second << std::endl;
     }
   }
   out.close();

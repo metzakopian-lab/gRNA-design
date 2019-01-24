@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
+#include <ctype.h>
 #include <cstdio>
 #include <cstring>
 
@@ -76,7 +77,8 @@ void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& p
       bool all_nts = true;
       for(int i = 0; i < nt; i++)
       {
-        const char& c = gRNA[i];
+        // cast to upper to get masked repeats
+        const char c = toupper(gRNA[i]);
         if( not ((c == 'A') || (c == 'T') || (c == 'G') || (c == 'G')))
         {
           all_nts = false;

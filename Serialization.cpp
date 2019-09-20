@@ -4,7 +4,7 @@
 
 void stats(const GuideModel& gRNAs)
 {
-  std::cout << "Found " << gRNAs.size() << " unique gRNAs" << std::endl;
+  std::cerr << "Found " << gRNAs.size() << " unique gRNAs" << std::endl;
   size_t max = 0, sum = 0;
   for (auto const& g : gRNAs)
   {
@@ -13,7 +13,7 @@ void stats(const GuideModel& gRNAs)
     sum += g.second.size();
   }
 
-  std::cout << "Max duplicates: " << max << ", Total unique loci: " << sum <<std::endl;
+  std::cerr << "Max duplicates: " << max << ", Total unique loci: " << sum <<std::endl;
 }
 
 

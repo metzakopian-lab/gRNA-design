@@ -18,4 +18,5 @@ class GuideMeta
 };
 
 
+
 typedef std::map<std::string, std::vector<GuideMeta>> GuideModel;

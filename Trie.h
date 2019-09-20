@@ -6,7 +6,7 @@ enum Base {A, T, G, C};
 
 inline Base map_base(const char& base)
 {
-  switch (base)
+  switch (toupper(base))
   {
     case 'A':
       {

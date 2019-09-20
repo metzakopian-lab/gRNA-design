@@ -1,188 +1,265 @@
+
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
 #include <ctype.h>
 #include <cstdio>
 #include <cstring>
-
+#include <omp.h>
 #include "Model.h"
 #include "Serialization.h"
 
 #define BUFFER_SIZE 120000
 
 #define N_STATE 1
-#define EOF_STATE 0
 #define SEQ_STATE 1 
 #define CHROMOSOME_STATE 2
 
 GuideModel gRNAs;
+char inv_nucl[256];
 
-int readFastaLine(FILE *fp, char* buffer, const size_t buf_size, size_t* length)
+
+
+int readFastaLine(std::ifstream& fasta, std::string& buffer)
 {
-  char c;
-  size_t i;
-  for ( i = 0; i < buf_size && (c = fgetc(fp)) != '>' && c != EOF; ++i)
-  {
-    if(c == '\n')
-    {
-      continue;
-    }
-    buffer[i] = c;
-  }
-
-  buffer[i] = '\0';
   
-  *length = i;
-
-  if (c == EOF)
+  unsigned int chunk = 100 * (2 << 20);
+  buffer.reserve(chunk);
+  unsigned int bytes_left = chunk;
+  
+  size_t i;
+  
+  if (fasta.peek() == '>')
   {
-    return EOF_STATE;
-  }
-  else if (c == '>')
-  {
+    
+    std::getline(fasta, buffer);
     return CHROMOSOME_STATE;
   }
-  else
+ 
+  while (!fasta.eof() && (fasta.peek() != '>'))
   {
-    return SEQ_STATE;
+    std::string tmp;
+    tmp.reserve(256);
+    std::getline(fasta, tmp);
+    // std::cout << tmp << std::endl;
+    // Remove character?
+    // std::cerr << "Removed " << tmp[tmp.size() -1] << " ";
+    // tmp.pop_back();
+    
+    buffer += tmp;
+    bytes_left -= tmp.size();
+    if (bytes_left  <  tmp.size() * 100 )
+    {
+      buffer.reserve(buffer.size() + chunk);
+      bytes_left = chunk;
+    }
+  }
+  return SEQ_STATE;
+}
+
+
+// Extracting chromosomes from 
+void extractgRNA(const std::string& buf,  int nt, const std::string& pam, const std::string& chr_name, unsigned int& guide_id)
+{
+  const unsigned int total_seq_length = nt + pam.size();
+
+  std::string inv_pam = pam;
+  for (int i = 0; i < pam.size(); ++i)
+  {
+    char cc = pam[i];
+    inv_pam[inv_pam.size() - 1 - i] = inv_nucl[cc];
+  }
+  
+  for (auto i = total_seq_length; i < buf.size(); ++i)
+  {
+
+    bool inv_state = true;
+    bool for_state = true;
+    
+    if (buf[i] == 'N')
+    {
+      
+      i += total_seq_length - 1;
+      
+      continue;
+    }
+
+    // Check sense and antisense strand
+    for ( unsigned int p = 0; p < pam.size(); ++p)
+    {
+      
+      if (pam[p] !=  'N' && (pam[p] != buf[i - pam.size() + p]))
+      {
+        for_state = false;
+      }
+
+      if (inv_pam[p] != 'N' && (inv_pam[p] != buf[i - total_seq_length + p]))
+      {
+        inv_state = false;
+      }
+    }
+
+    if (inv_state || for_state) 
+    {
+      GuideMeta g;
+      bool invalid = false;
+      auto gRNA = buf.substr(i - total_seq_length, total_seq_length);
+
+      // Filter N's (optimized)
+      for (auto const& c : gRNA)
+      {
+        if (c == 'N')
+        {
+          invalid = true;
+          break;
+        }
+
+      }
+      if (invalid)
+      {
+        continue;
+      }
+      
+      for ( unsigned int p = 0; p < pam.size(); ++p)
+      {
+        if(pam[p] == 'N' && for_state)
+        {
+           gRNA[gRNA.size() - pam.size() + p] = 'N' ;
+          
+        }
+        if (inv_pam[p] == 'N' && inv_state)
+        {
+          gRNA[p] = 'N';
+
+        }
+      }
+      g.chromosome = chr_name;
+      g.end_pos = i;
+      g.start_pos = g.end_pos - total_seq_length;
+      // std::cout << ">" << g.id <<"," << (inv_state ? "inv" : "for")  << g.chromosome << ":" << g.start_pos << "-" << g.end_pos << std::endl;
+      // std::cout << gRNA << std::endl;
+      
+      
+      #pragma omp critical
+      {
+        g.id = guide_id++;
+        auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<GuideMeta>()));
+        if (it.second)
+        {
+          it.first->second.push_back(g);
+        }
+      }
+      
+
+      
+    }
   }
 }
 
-void extractgRNA(const char* buf, size_t new_bytes, int nt, const std::string& pam, const std::string& chr_name, size_t& genome_offset_counter, size_t& guide_uid)
+int worker(std::ifstream& fasta, const unsigned char nt, const std::string pam)
 {
   
-  char gRNA[256];
-  unsigned offset = nt + pam.size();
-  const char* end = buf + new_bytes + offset;
-  unsigned char pam_state = 0;
+  unsigned int gRNA_id = 0;
   
-  for (const char* b = buf + nt; b != end; ++b, ++genome_offset_counter)
+  std::vector <std::pair<std::string, std::string>> chromosomes;
+  std::cerr << "Reading Fasta";
+  while (!fasta.eof())
   {
-    if (pam[pam_state] == 'N')
+    std::pair<std::string, std::string> chr;
+    int state1 = readFastaLine(fasta, chr.first);
+    int state2 = readFastaLine(fasta, chr.second);
+    
+    if (not (state1 == CHROMOSOME_STATE && state2 == SEQ_STATE))
     {
-      pam_state++;
+      std::cerr << "Something went wrong" << std::endl;
+      return 1;
     }
-    else if (pam[pam_state] == *b)
+    std::string chr_name;
+    std::size_t pos = chr.first.find_first_of(" \t\n");
+    if (pos != std::string::npos)
     {
-      pam_state++;
+      chr_name = chr.first.substr(1, pos - 1);
     }
     else
     {
-      pam_state = 0;
+      chr_name = chr.first.substr(1);
     }
-    if(pam_state == pam.size())
-    {
-      memcpy(gRNA,b - offset, nt);
-      gRNA[nt] = '\0';
-      bool all_nts = true;
-      for(int i = 0; i < nt; i++)
-      {
-        // cast to upper to get masked repeats
-        const char c = toupper(gRNA[i]);
-        if( not ((c == 'A') || (c == 'T') || (c == 'G') || (c == 'G')))
-        {
-          all_nts = false;
-          break;
-        }
-      }
-      if (all_nts)
-      {
-        GuideMeta g;
-        g.start_pos = genome_offset_counter - pam.size() - nt;
-        g.end_pos = g.start_pos + nt;
-        g.chromosome = chr_name;
-        g.id = guide_uid++;
-        auto it = gRNAs.insert(std::make_pair(gRNA, std::vector<GuideMeta>()));
-        it.first->second.push_back(g);
-      }
-    }
-  }
-}
-
-int worker(FILE* fp, unsigned char nt, const std::string pam)
-{
-  int write_buf_pos_index = 0;
-  const size_t buf_size = 100000000;
-  char* buffer = new char[buf_size]; // 10M chunks
-
-  size_t buf_read = 0;
-  char* buf = buffer;
-
-
-  size_t offset = nt + pam.size();
-  size_t pos_counter = 0;
-  size_t guide_id = 0;
-  std::string chr;
-
-  while (1)
-  {
-    int state = readFastaLine(fp, buf, buf_size - offset, &buf_read);
-    std::string chr_name;
-    if (state == CHROMOSOME_STATE)
-    {
-      // read the new chromosome
-      char chromname[1024];
-      fgets(chromname, 1024, fp);
-
-
-      chr = chromname;
-      
-      std::size_t pos = chr.find_first_of(" \t");
-      if(pos != std::string::npos)
-      {
-        chr_name = chr.substr(0,pos);
-      }
-      
-      std::cout << " Processing chromosome: " << chromname << " as " << chr_name << std::endl;
-      buf = buffer;
-      pos_counter = 0;
-      continue;
-
-    }
-    extractgRNA(buffer, buf_read, nt, pam, chr_name, pos_counter, guide_id);
-    memcpy(buffer, buf + buf_read - offset, offset);
-    buf = buffer + offset;
-    
-    if (state == EOF_STATE)
-    {
-      // Let's get the fuck out of here
-      break;
-    }
+    chr.first = chr_name;
+    // std::cerr << "Read chromosome: " << chr.first << " as " << chr_name << std::endl; 
+    chromosomes.push_back(chr);
   }
   
-  return 1;
+  #pragma omp parallel for schedule(dynamic)
+  for (int i = 0; i < chromosomes.size(); i++)
+  {
+    std::cerr << "Processing chromosome: " << chromosomes[i].first << " " << chromosomes[i].second.size() / 1000000 << "mBases" << std::endl; 
+    extractgRNA(chromosomes[i].second, nt, pam, chromosomes[i].first, gRNA_id);
+    std::cerr << "Finished chromosome: " << chromosomes[i].first << std::endl; 
+    chromosomes[i].second.clear();
+  }
+
+  
+  
+
+  #pragma omp
+  return 0;
 }
 
 
 
 int main(int argc, char* argv[])
 {
-  
+
+  inv_nucl['A'] = 'T';
+  inv_nucl['T'] = 'A';
+  inv_nucl['G'] = 'C';
+  inv_nucl['C'] = 'G';
+  inv_nucl['N'] = 'N';
+
+
   if(argc != 3)
   {
     std::cerr << "Invalid number of arguments" << std::endl;
-    std::cout << "Usage: " << argv[0] << "<fasta file> <binary-archive>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << "<fasta file> <fasta-output-file>" << std::endl;
     return 1;
   }
 
   std::string file = argv[1];
-  std::string gRNA_file = argv[2];
+//  std::string gRNA_file = argv[2];
+  std::string gRNAs_fasta = argv[2];
   
-  std::cout << "Input file " << file << std::endl;
-  FILE *fp = fopen(file.c_str(), "r");
+  std::cerr << "Input file " << file << std::endl;
+  std::ifstream  fp(file.c_str());
   
   if (fp)
   {
-    worker(fp,19,"NGG");
+    worker(fp, 19, "NGG");
   }
   else
   {
     std::cerr << file << " not found" << std::endl;
     return 1;
   }
-  size_t t = 0, max = 0;
   
-  modelSerialize(gRNAs,gRNA_file);
+  //modelSerialize(gRNAs, gRNA_file);
+
+
+  std::ofstream out(gRNAs_fasta.c_str());
+  if (out)
+  {
+    for(auto const & _g : gRNAs)
+    {
+      auto g = _g.second[0];
+      auto gRNA = _g.first;
+      std::cout << ">" << g.id <<"," << g.chromosome << ":" << g.start_pos << "-" << g.end_pos << std::endl;
+      std::cout << gRNA << std::endl;
+    }
+
+  }
+  else
+  {
+    std::cerr << "Could not open to" << gRNAs_fasta.c_str() <<std::endl;
+  }
  
   return 0;
 }

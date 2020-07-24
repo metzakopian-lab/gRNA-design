@@ -9,9 +9,9 @@
 #include <limits.h>
 #include <stdint.h>
 
-#include "elib.h"
-#include "array.h"
-#include "sequence.h"
+#include "smalt/elib.h"
+#include "smalt/array.h"
+#include "smalt/sequence.h"
 
 
 enum {

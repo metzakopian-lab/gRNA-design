@@ -582,8 +582,8 @@ static int screenPAM(ErrMsg *errmsgp,
     ERRMSGNO(errmsgp, errcode);
 
   
-  basep = (const uint32_t *) seqSetGetBaseData(&ssflg, &cod, &siz, ssp);
-
+  /* basep = (const uint32_t *) seqSetGetBaseData(&ssflg, &cod, &siz, ssp); */
+  basep = (const uint32_t *) seqSetGetSeqDatByIndex(&ssflg, &cod, &siz, ssp);
   if (cod != SEQCOD_COMPRESSED || !(ssflg&SEQSET_COMPRESSED))
     ERRMSGNO(errmsgp, ERRCODE_SEQCODE);
 

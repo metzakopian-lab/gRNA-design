@@ -2775,7 +2775,6 @@ int seqSetFetchSegmentBySequence(SeqFastq *sqp, SEQNUM_t seqidx,
   return errcode;
 }
 
-
 int seqSetGetIndexAndOffset(SEQNUM_t *seqidx, SEQLEN_t *seqoffs, SETSIZ_t offs, const SeqSet *ssp)
 {
   SEQNUM_t s, a, b;
@@ -2801,6 +2800,7 @@ int seqSetGetIndexAndOffset(SEQNUM_t *seqidx, SEQLEN_t *seqoffs, SETSIZ_t offs, 
 
   return ERRCODE_SUCCESS;
 }
+
 
 SEQLEN_t seqSetGetSeqDatByIndex(SETSIZ_t *offs, const char **name, SEQNUM_t seqidx, const SeqSet *ssp)
 {

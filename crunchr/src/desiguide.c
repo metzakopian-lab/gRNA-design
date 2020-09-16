@@ -557,9 +557,9 @@ static int screenPAM(ErrMsg *errmsgp,
   int errcode = ERRCODE_SUCCESS;
   int nsu, minbasctr;
   char cod;
-  unsigned char ssflg;
+  unsigned char ssflg; // Contains the flags
   //SEQNUM_t s, snum;
-  SETSIZ_t siz;
+  SETSIZ_t siz; // n_seq number of sequences
   //SETSIZ_t const *soffsp;
   uint32_t const *basep;
   GUIDEPOS_T ctr, maxpos;
@@ -582,8 +582,9 @@ static int screenPAM(ErrMsg *errmsgp,
     ERRMSGNO(errmsgp, errcode);
 
   
-  /* basep = (const uint32_t *) seqSetGetBaseData(&ssflg, &cod, &siz, ssp); */
-  basep = (const uint32_t *) seqSetGetSeqDatByIndex(&ssflg, &cod, &siz, ssp);
+  basep = (const uint32_t *) seqSetGetBaseData(&ssflg, &cod, &siz, ssp);
+  //basep = seqSetGetBaseData(&ssflg, &cod, &siz, ssp);
+
   if (cod != SEQCOD_COMPRESSED || !(ssflg&SEQSET_COMPRESSED))
     ERRMSGNO(errmsgp, ERRCODE_SEQCODE);
 

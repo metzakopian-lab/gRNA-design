@@ -506,6 +506,8 @@ extern "C"
    * \param ssp Sequence set.
    */
 
+  
+  
   SEQLEN_t seqSetGetSeqDatByIndex(SETSIZ_t *offs, const char **name, 
 				  SEQNUM_t seqidx, const SeqSet *ssp);
   /**< Accessor for sequence offset, length, name by sequence index. Returns sequence
